@@ -1,37 +1,18 @@
 const {test, expect, request} = require('@playwright/test');
+const {APIUtils} = require('./utils/APIUtils');
 
 const Payload = {userEmail: "sakura28@gmail.com", userPassword: "1435@Abc"};
 const orderPayload = {orders: [{country: "India", productOrderedId: "6960eac0c941646b7a8b3e68"}]}
+
 let token;
 let orderId;
+let response;
 
 test.beforeAll( async()=>
 {
-    //Login API call to get the token
     const apiContext = await request.newContext();
-    const response = await apiContext.post("https://rahulshettyacademy.com/api/ecom/auth/login", 
-    {
-        data: Payload
-     })
-
-    expect(response.ok()).toBeTruthy();
-    const responseJson = await response.json();
-    console.log(responseJson);
-    token = responseJson.token;
-
-
-    //Create order API call to get the order id
-    const orderResponse = await apiContext.post("https://rahulshettyacademy.com/api/ecom/order/create-order", 
-    {
-        data: orderPayload,
-        headers: {
-            'Authorization': token,
-            'Content-Type': 'application/json'
-        }
-    });
-    const orderResponseJson = await orderResponse.json();
-    console.log(orderResponseJson);
-    orderId = orderResponseJson.orders[0];
+    const apiUtils = new APIUtils(apiContext,Payload);
+    response = await apiUtils.createOrder(orderPayload);
 });
 
 test.beforeEach(async ({page})=>{
@@ -42,12 +23,12 @@ test.beforeEach(async ({page})=>{
 //Place order using API token and validate the order in UI
 test('Order a product using API token.',async ({page})=>
 {
+   
     await page.addInitScript(value => {
         window.localStorage.setItem('token', value);
-    }, token);
+    }, response.token);
 
     await page.goto("https://rahulshettyacademy.com/client/");   
-    await page.pause();
     await page.locator("button[routerlink*='myorders']").click();
     await page.locator("tbody").waitFor();
     const rows = page.locator("tbody tr");
@@ -55,7 +36,7 @@ test('Order a product using API token.',async ({page})=>
     for(let i=0;i<rowCount;++i)
     {
         const rowOrderId = await rows.nth(i).locator("th").textContent();
-        if(orderId.includes(rowOrderId))
+        if(response.orderId.includes(rowOrderId))
         {
             await rows.nth(i).locator("button").first().click();
             break;
@@ -63,7 +44,6 @@ test('Order a product using API token.',async ({page})=>
     }
 
     const orderIdDetails = await page.locator(".col-text").textContent();
-    await page.pause();
-    expect(orderId.includes(orderIdDetails)).toBeTruthy();
+expect(response.orderId.includes(orderIdDetails)).toBeTruthy();
 
 });
